@@ -1,0 +1,307 @@
+:linkattrs:
+
+= Sail into Cloud
+
+The repository holds the application sources that are used to demonstrate the following features of https://istio.io/[Istio],
+
+* https://istio.io/docs/tasks/zipkin-tracing.html[Distributed tracing]
+* https://istio.io/docs/reference/config/traffic-rules/routing-rules.html[Canary Releases]
+* https://istio.io/docs/reference/config/traffic-rules/destination-policies.html#istio.proxy.v1.config.CircuitBreaker[Circuit Breakers]
+
+[[pre-req]]
+== Prerequisite
+
+Istio requires any running Kubernetes cluster. All these demos were done and tested on https://kubernetes.io/docs/getting-started-guides/minikube/[minikube]
+(v0.20.0)
+
+NOTE: Istio right now cant' be installed on to OpenShift
+
+[[istio-setup]]
+== Istio Quicksetup
+
+Download https://github.com/istio/istio/releases/latest[istio] and extract the same to the local machine, this location will be referred to as $ISTIO_HOME,
+add $ISITO_HOME/bin to the *PATH*
+
+[code,sh]
+----
+kubectl apply -f $ISTIO_HOME/install/kubernetes/istio-rbac-beta.yaml <1>
+kubectl apply -f $ISTIO_HOME/install/kubernetes/istio.yaml <2>
+kubectl apply -f $ISTIO_HOME/install/kubernetes/addons <3>
+
+----
+
+<1> setup the RBAC required to successfully run Istio inside kubernetes
+<2> setup the Istio core appliction and components like istio-pilot, istio-ingress, istio-egress and istio-mixer
+<3> setup the Istio addon components like servicegraph, zipkin, prometheus and grafana
+
+Successful setup will have the following pods and services running,
+
+image::./istio_setup.png[Istio Setup]
+
+image::./istio_services.png[Istio Setup]
+The services can be accessed using the pattern `minikube service <service-name>`, e.g. to access grafana use `minikube service grafana`
+
+[NOTE]
+====
+* This demo we will not use *istio-auth*
+* https://grafana.com/[Grafana] is used to display the Istio Dashboard
+* http://zipkin.io/[Zipkin] is used to collect spans and traces (Distributed Tracing) from the application
+* https://prometheus.io/[Prometheus] is used for monoitoring
+* servicegraph is a visual representation of service and its interactions
+====
+
+Detailed instructions is available at https://istio.io/docs/tasks/installing-istio.html
+
+[[building]]
+== Building
+
+Clone the sources from https://github.com/workspace7/sail-into-cloud, the location of clone will be called $PROJECT_HOME.
+
+The repositories has 4 tags namely:
+
+* *sidecar* - the sources used to demo http://blog.kubernetes.io/2015/06/the-distributed-system-toolkit-patterns.html[sidecar]
+* *tracing* - the sources used to demo https://istio.io/docs/tasks/zipkin-tracing.html[distributed tracing]
+* *canary* - the sources used to dmemo canary releases
+* *circuit-breaker* - the sources used to demo https://martinfowler.com/bliki/CircuitBreaker.html[circuit breaker]
+
+The application that wil be used in the demo is a simple Hello World spring boot application that says hello in different languages. The sources are available
+in the repo under link:./apps[Apps].
+
+[[sidecar]]
+== Sidecar
+
+[code,sh]
+----
+cd $PROJECT_HOME/1_sidecar/hello-sidecar
+git checkout sidecar
+kubectl apply -f hello-sidecar.yaml
+----
+
+This is will deploy a apache httpd server, the satic web resources of httpd server will be enriched via sidecar which is a small git synchronizer, that pulls
+the static sources from the github repo https://github.com/kameshsampath/hello-sidecar
+
+The application can be accessed using the command `minikube service hello-sidecar` or you can run the following command as well `curl $(minikube service hello-sidecar --url)`
+
+[[sidecar]]
+== Distributed Tracing
+
+This demo shows how to do distributed tracing with https://istio.io[Istio], this steps requires <<istio-setup>> is done and all pods are up and running.
+
+=== Building the application
+[code,sh]
+----
+eval $(minikube docker-env) <1>
+cd $PROJECT_HOME/apps
+git checkout tracing <2>
+./mvnw clean install
+----
+
+<1> setup the DOCKER_HOST and other environment variables that will be required to build and push the DOCKER images
+<2> Checkout out the `tracing` tag
+
+Successful build will show the following version *1.0* of the application docker images,
+
+image::./app_docker_images_v1.png[Application Docker Images v1.0]
+
+=== Deploying the application
+
+The application can be deployed to Istio service mesh using the following commands,
+
+[code,sh]
+----
+cd $PROJECT_HOME/2_tracing/istio
+kubectl apply -f <(istioctl kube-inject -f $PROJECT_HOME/2_tracing/istio/helloworld.yaml) <1>
+----
+
+(OR)
+
+The source repo $PROJECT_HOME/2_tracing/istio folder already has the istio service mesh injected deployments _itsio_helloworld.yaml_, which could also be
+used directy as shown below,
+
+[code,sh]
+----
+cd $PROJECT_HOME/2_tracing/istio
+kubectl apply -f itsio_helloworld.yaml
+----
+
+Successfull deployment will show the following pods running,
+
+image::./app_pods_v1.png[Application Pods v1.0]
+
+<1> Add the Istio service mesh related https://kubernetes.io/docs/concepts/workloads/pods/init-containers/[init-containers] and sidecar proxy
+
+== Accessing the application
+
+All the application urls are exposed using https://kubernetes.io/docs/concepts/services-networking/ingress/[ingress] routes, hence to access the application we need to find the `istio-ingress` service `NodePort` and the route path to the application. The following command access the helloworld-tracer using `istio-ingress` route's `NodePort` and `minikube` IP.
+
+[code,sh]
+----
+curl $(minikube ip):31513/hellotracer <1>
+----
+<1> `31513` is the istio-ingress `NodePort`, this can be found using the command `kubectl get svc istio-ingress -o jsonpath='{.spec.ports[0].nodePort}'`
+
+=== Service Dependencies
+
+The following graph shows the service dependencies,
+
+image::./service_deps.png[Service Dependencies]
+
+=== Seeing Traces and Span
+
+Access the Zipkin `minikube service zipkin` or you can run the following command as well `curl $(minikube service zipkin --url)`
+
+image::./zipkin_traces.png[Zipkin Traces]
+
+[[canary-release]]
+== Canary Release
+
+In this we will deploy a new version of the "hola" application and add some routing rules to enable https://martinfowler.com/bliki/CanaryRelease.html[Canary Release]
+that distributes the load between two versions of the applications using https://istio.io/docs/tasks/request-routing.html[Istio Routing Rules]
+
+=== Building the application
+[code,sh]
+----
+eval $(minikube docker-env) <1>
+git checkout canary <2>
+cd $PROJECT_HOME/apps/hola
+./mvnw clean install
+----
+
+<1> setup the DOCKER_HOST and other environment variables that will be required to build and push the DOCKER images, if you have already done this, no need to repeat but its required whenever a new shell is opened
+<2> Checkout out the `canary` tag
+
+Successful build will show the following version *2.0* of the hola application docker image,
+
+image::./app_hola_images_v2.png[Hola Application Docker Image v2.0]
+
+=== Deploying the application
+
+The application can be deployed to Istio service mesh using the following commands,
+
+[code,sh]
+----
+cd $PROJECT_HOME/3_canary/istio
+kubectl apply -f <(istioctl kube-inject -f $PROJECT_HOME/3_canary/istio/hola-v2.yaml)
+----
+
+(OR)
+
+The source repo $PROJECT_HOME/2_tracing/istio folder already has the istio service mesh injected deployments _itsio_hola-v2.yaml_, which could also be
+used directy as shown below,
+
+[code,sh]
+----
+cd $PROJECT_HOME/3_canary/istio
+kubectl apply -f istio_hola-v2.yaml
+----
+
+Successfull deployment will show the following pods running,
+
+image::./app_hola_v2.png[Hola Pods v2.0]
+
+=== Creating Routing route rules
+
+The following command creates the two Istio routing rules,
+
+* that distributes the application traffic in the ratio of 1:4 between v1.0 and v2.0 of the hola application
+* routes all traffic to v2.0 of hola application if the request has the header *cust-type=premium*
+
+[code,sh]
+----
+cd $PROJECT_HOME/3_canary/istio
+istioctl create -f hola-rules.yaml
+----
+
+=== Accessing the application
+
+If you run a load test with any load test tools like jmeter, gating etc., to the url `minikube ip:<ingress-port>/hellotracer` to see the routing rules getting applied.
+
+==== Traffic without headers
+
+image::./hola_route_dist.png[Hola Route Distribution]
+
+==== Traffic with header cust-type=premium
+
+NOTE: currently this does not work because of https://github.com/istio/pilot/issues/895[Issue 895]
+
+[[circuit-breakers]]
+== Circuit Breakers
+
+In this we will deploy a new version of the "aloha" application and add some routing rules to enable https://martinfowler.com/bliki/CircuitBreaker.html[Circuit Breakers]
+that distributes the load between two versions of the applications using https://istio.io/docs/tasks/request-routing.html[Istio Routing Rules]
+
+=== Building the application
+[code,sh]
+----
+eval $(minikube docker-env) <1>
+git checkout circuit-breaker <2>
+cd $PROJECT_HOME/apps/aloha
+./mvnw clean install
+cd $PROJECT_HOME/apps/helloworld
+mvn clean install
+----
+
+1> setup the DOCKER_HOST and other environment variables that will be required to build and push the DOCKER images, if you have already done this, no need to repeat but its required whenever a new shell is opened
+<2> Checkout out the `circuit-breaker` tag
+
+Successful build will show the following version *2.0* of the hola application docker image,
+
+image::./app_aloha_helloworld_images_v2.png[Aloha/HelloWorld Application Docker Image v2.0]
+
+=== Deploying the application
+
+The application can be deployed to Istio service mesh using the following commands,
+
+[code,sh]
+----
+cd $PROJECT_HOME/4_circuit_breaker/istio
+kubectl apply -f <(istioctl kube-inject -f $PROJECT_HOME/4_circuit_breaker/istio/circuit-breaker.yaml)
+----
+
+(OR)
+
+The source repo $PROJECT_HOME/2_tracing/istio folder already has the istio service mesh injected deployments _itsio_circuit-breaker.yaml_, which could also be
+used directy as shown below,
+
+[code,sh]
+----
+cd $PROJECT_HOME/4_circuit_breaker/istio
+kubectl apply -f circuit-breaker.yaml
+----
+
+Successfull deployment will show the following pods running,
+
+image::./app_helloworld_aloha_pods_v2.png[HelloWorld Aloha Pods v2.0]
+
+=== Creating Destination policies
+
+Running the following command will create the destination policy to aloha that will apply the circuit breakers,
+
+[code,sh]
+----
+cd $PROJECT_HOME/4_circuit_breaker/istio
+istioctl create -f aloha-cb-policy.yaml
+----
+
+==== Apply new Ingress rules
+
+Add the new ingress rule that will add new ingress route to `aloha2` path
+
+[code,sh]
+----
+cd $PROJECT_HOME/4_circuit_breaker/istio
+kubectl apply -f helloworld_ingress.yaml
+----
+
+=== Checking Circuit Breakers
+
+Run the following command,
+
+[code,sh]
+----
+for i in {1..10}; do $(minikube ip):31513/aloha2 ; echo ""; done; <1>
+----
+
+<1> `31513` is the istio-ingress `NodePort`, this can be found using the command `kubectl get svc istio-ingress -o jsonpath='{.spec.ports[0].nodePort}'`
+
+--END--
