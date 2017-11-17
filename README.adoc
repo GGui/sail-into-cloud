@@ -11,10 +11,13 @@ The repository holds the application sources that are used to demonstrate the fo
 [[pre-req]]
 == Prerequisite
 
-Istio requires any running Kubernetes cluster. All these demos were done and tested on https://kubernetes.io/docs/getting-started-guides/minikube/[minikube]
-(v0.20.0)
+Istio requires any running Kubernetes cluster. 
 
-NOTE: Istio right now cant' be installed on to OpenShift
+https://github.com/minishift/minishift[minishift] - v1.8.x with OpenShift version v3.7.0-rc.0 or above
+
+(OR)
+
+https://kubernetes.io/docs/getting-started-guides/minikube/[minikube] v0.23.0
 
 [[istio-setup]]
 == Istio Quicksetup
@@ -22,35 +25,64 @@ NOTE: Istio right now cant' be installed on to OpenShift
 Download https://github.com/istio/istio/releases/latest[istio] and extract the same to the local machine, this location will be referred to as $ISTIO_HOME,
 add $ISITO_HOME/bin to the *PATH*
 
+NOTE: as of this demo `0.2.12` was the latest version
+
+=== Core 
 [code,sh]
 ----
-kubectl apply -f $ISTIO_HOME/install/kubernetes/istio-rbac-beta.yaml <1>
-kubectl apply -f $ISTIO_HOME/install/kubernetes/istio.yaml <2>
-kubectl apply -f $ISTIO_HOME/install/kubernetes/addons <3>
+oc new-project istio-system <1>
 
+oc adm policy add-scc-to-user anyuid -z istio-ingress-service-account -n istio-system <2>
+oc adm policy add-scc-to-user anyuid -z istio-egress-service-account -n istio-system <3>
+oc adm policy add-scc-to-user anyuid -z default -n istio-system <4>
+
+oc apply -f $ISTIO_HOME/install/kubernetes/istio.yaml <5>
+
+oc expose svc istio-ingress <6>
 ----
 
-<1> setup the RBAC required to successfully run Istio inside kubernetes
-<2> setup the Istio core appliction and components like istio-pilot, istio-ingress, istio-egress and istio-mixer
-<3> setup the Istio addon components like servicegraph, zipkin, prometheus and grafana
+<1> - create a new openshift project to hold istio core components
+<2> - allows istio-ingress-service-account to run the pods with UID `0`
+<3> - allows istio-egress-service-account to run the pods with UID `0`
+<4> - allows default to run the pods with UID `0`
+<5> - install core Istio components
+<6> - Expose the istio-ingress service
+
+=== Addons 
+
+[code,sh]
+----
+oc apply -f install/kubernetes/addons/prometheus.yaml <1>
+oc apply -f install/kubernetes/addons/grafana.yaml <2>
+oc apply -f install/kubernetes/addons/servicegraph.yaml <3>
+
+oc expose svc servicegraph <4>
+oc expose svc grafana <5>
+
+oc process -f https://raw.githubusercontent.com/jaegertracing/jaeger-openshift/master/all-in-one/jaeger-all-in-one-template.yml | oc create -f - <6>
+----
+
+<1> - Install Prometheus to gather metrics from the services
+<2> - Grafana will be used as monitoring dashboard 
+<3> - servicegraph is used to visualize service dependencies
+<4> - expose servicegraph service
+<5> - expose grafana service
+<6> - Deploy Jaeger to collect the spans and traces
 
 Successful setup will have the following pods and services running,
 
 image::./istio_setup.png[Istio Setup]
 
-image::./istio_services.png[Istio Setup]
-The services can be accessed using the pattern `minikube service <service-name>`, e.g. to access grafana use `minikube service grafana`
-
 [NOTE]
 ====
 * This demo we will not use *istio-auth*
 * https://grafana.com/[Grafana] is used to display the Istio Dashboard
-* http://zipkin.io/[Zipkin] is used to collect spans and traces (Distributed Tracing) from the application
+* https://uber.github.io/jaeger/[Jaeger] is used to collect spans and traces (Distributed Tracing) from the application
 * https://prometheus.io/[Prometheus] is used for monoitoring
 * servicegraph is a visual representation of service and its interactions
 ====
 
-Detailed instructions is available at https://istio.io/docs/tasks/installing-istio.html
+Detailed instructions is available at https://istio.io/docs/setup/kubernetes/quick-start.html
 
 [[building]]
 == Building
@@ -60,12 +92,15 @@ Clone the sources from https://github.com/workspace7/sail-into-cloud, the locati
 The repositories has 4 tags namely:
 
 * *sidecar* - the sources used to demo http://blog.kubernetes.io/2015/06/the-distributed-system-toolkit-patterns.html[sidecar]
-* *tracing* - the sources used to demo https://istio.io/docs/tasks/zipkin-tracing.html[distributed tracing]
-* *canary* - the sources used to dmemo canary releases
+* *tracing* - the sources used to demo https://istio.io/docs/tasks/telemetry/distributed-tracing.html[distributed tracing]
+* *canary* - the sources used to demo canary releases
 * *circuit-breaker* - the sources used to demo https://martinfowler.com/bliki/CircuitBreaker.html[circuit breaker]
 
 The application that wil be used in the demo is a simple Hello World spring boot application that says hello in different languages. The sources are available
 in the repo under link:./apps[Apps].
+
+We will create a new project called "demo-apps" where we will deploy all the demo applications. To create the new project run the command 
+`oc new-project demo-apps`
 
 [[sidecar]]
 == Sidecar
@@ -74,11 +109,14 @@ in the repo under link:./apps[Apps].
 ----
 cd $PROJECT_HOME/1_sidecar/hello-sidecar
 git checkout sidecar
-kubectl apply -f hello-sidecar.yaml
+oc apply -f hello-sidecar.yaml
 ----
 
 This is will deploy a apache httpd server, the satic web resources of httpd server will be enriched via sidecar which is a small git synchronizer, that pulls
 the static sources from the github repo https://github.com/kameshsampath/hello-sidecar
+
+Accessing Application
+===
 
 The application can be accessed using the command `minikube service hello-sidecar` or you can run the following command as well `curl $(minikube service hello-sidecar --url)`
 
@@ -110,21 +148,21 @@ The application can be deployed to Istio service mesh using the following comman
 [code,sh]
 ----
 cd $PROJECT_HOME/2_tracing/istio
-kubectl apply -f <(istioctl kube-inject -f $PROJECT_HOME/2_tracing/istio/helloworld.yaml) <1>
+oc apply -f <(istioctl kube-inject -f $PROJECT_HOME/2_tracing/istio/helloworld.yaml) <1>
 ----
 
 (OR)
 
 The source repo $PROJECT_HOME/2_tracing/istio folder already has the istio service mesh injected deployments _itsio_helloworld.yaml_, which could also be
-used directy as shown below,
+used directly as shown below,
 
 [code,sh]
 ----
 cd $PROJECT_HOME/2_tracing/istio
-kubectl apply -f itsio_helloworld.yaml
+oc apply -f itsio_helloworld.yaml
 ----
 
-Successfull deployment will show the following pods running,
+Successful deployment will show the following pods running,
 
 image::./app_pods_v1.png[Application Pods v1.0]
 
@@ -132,13 +170,22 @@ image::./app_pods_v1.png[Application Pods v1.0]
 
 == Accessing the application
 
-All the application urls are exposed using https://kubernetes.io/docs/concepts/services-networking/ingress/[ingress] routes, hence to access the application we need to find the `istio-ingress` service `NodePort` and the route path to the application. The following command access the helloworld-tracer using `istio-ingress` route's `NodePort` and `minikube` IP.
+All the application urls are exposed using https://kubernetes.io/docs/concepts/services-networking/ingress/[ingress] routes, hence to access the application we need to find the `istio-ingress` service `NodePort` and the route path to the application. 
+
+The following command access `istio-ingress` route. Use the host with __http__ to access ingress paths
 
 [code,sh]
 ----
-curl $(minikube ip):31513/hellotracer <1>
+oc get route -n istio-system istio-ingress
 ----
-<1> `31513` is the istio-ingress `NodePort`, this can be found using the command `kubectl get svc istio-ingress -o jsonpath='{.spec.ports[0].nodePort}'`
+
+(OR)
+[code,sh]
+----
+oc get route -n istio-system istio-ingress -o jsonpath='{.spec.host}'
+----
+
+e.g. to access hello-world-tracer the URL will look like `http://<output-of-command>/hellotracer`
 
 === Service Dependencies
 
@@ -150,7 +197,7 @@ image::./service_deps.png[Service Dependencies]
 
 Access the Zipkin `minikube service zipkin` or you can run the following command as well `curl $(minikube service zipkin --url)`
 
-image::./zipkin_traces.png[Zipkin Traces]
+image::./jaeger_traces.png[Zipkin Traces]
 
 [[canary-release]]
 == Canary Release
@@ -181,7 +228,7 @@ The application can be deployed to Istio service mesh using the following comman
 [code,sh]
 ----
 cd $PROJECT_HOME/3_canary/istio
-kubectl apply -f <(istioctl kube-inject -f $PROJECT_HOME/3_canary/istio/hola-v2.yaml)
+oc apply -f <(istioctl kube-inject -f $PROJECT_HOME/3_canary/istio/hola-v2.yaml)
 ----
 
 (OR)
@@ -192,10 +239,10 @@ used directy as shown below,
 [code,sh]
 ----
 cd $PROJECT_HOME/3_canary/istio
-kubectl apply -f istio_hola-v2.yaml
+oc apply -f istio_hola-v2.yaml
 ----
 
-Successfull deployment will show the following pods running,
+Successful deployment will show the following pods running,
 
 image::./app_hola_v2.png[Hola Pods v2.0]
 
@@ -222,7 +269,7 @@ image::./hola_route_dist.png[Hola Route Distribution]
 
 ==== Traffic with header cust-type=premium
 
-NOTE: currently this does not work because of https://github.com/istio/pilot/issues/895[Issue 895]
+image::./hola_route_premium_dist.png[Hola Route for Premium Customers]
 
 [[circuit-breakers]]
 == Circuit Breakers
@@ -255,7 +302,7 @@ The application can be deployed to Istio service mesh using the following comman
 [code,sh]
 ----
 cd $PROJECT_HOME/4_circuit_breaker/istio
-kubectl apply -f <(istioctl kube-inject -f $PROJECT_HOME/4_circuit_breaker/istio/circuit-breaker.yaml)
+oc apply -f <(istioctl kube-inject -f $PROJECT_HOME/4_circuit_breaker/istio/circuit-breaker.yaml)
 ----
 
 (OR)
@@ -266,10 +313,9 @@ used directy as shown below,
 [code,sh]
 ----
 cd $PROJECT_HOME/4_circuit_breaker/istio
-kubectl apply -f circuit-breaker.yaml
+oc apply -f circuit-breaker.yaml
 ----
-
-Successfull deployment will show the following pods running,
+Successful deployment will show the following pods running,
 
 image::./app_helloworld_aloha_pods_v2.png[HelloWorld Aloha Pods v2.0]
 
@@ -290,7 +336,7 @@ Add the new ingress rule that will add new ingress route to `aloha2` path
 [code,sh]
 ----
 cd $PROJECT_HOME/4_circuit_breaker/istio
-kubectl apply -f helloworld_ingress.yaml
+oc apply -f helloworld_ingress.yaml
 ----
 
 === Checking Circuit Breakers
@@ -302,6 +348,6 @@ Run the following command,
 for i in {1..10}; do $(minikube ip):31513/aloha2 ; echo ""; done; <1>
 ----
 
-<1> `31513` is the istio-ingress `NodePort`, this can be found using the command `kubectl get svc istio-ingress -o jsonpath='{.spec.ports[0].nodePort}'`
+<1> `31513` is the istio-ingress `NodePort`, this can be found using the command `oc get svc istio-ingress -o jsonpath='{.spec.ports[0].nodePort}'`
 
 --END--
