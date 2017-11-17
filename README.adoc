@@ -78,11 +78,30 @@ image::./istio_setup.png[Istio Setup]
 * This demo we will not use *istio-auth*
 * https://grafana.com/[Grafana] is used to display the Istio Dashboard
 * https://uber.github.io/jaeger/[Jaeger] is used to collect spans and traces (Distributed Tracing) from the application
-* https://prometheus.io/[Prometheus] is used for monoitoring
+* https://prometheus.io/[Prometheus] is used for monitoring
 * servicegraph is a visual representation of service and its interactions
 ====
 
-Detailed instructions is available at https://istio.io/docs/setup/kubernetes/quick-start.html
+==== Accessing Addons
+
+All the applications can be accessed using the minishift command `minishift openshift service`
+
+[code,sh]
+----
+minishift openshift service grafana -n istio-system 
+minishift openshift service jaeger-query -n istio-system 
+minishift openshift service servicegraph -n istio-system 
+----
+
+NOTE: if you have deployed isito in different namespace than `istio-system`, alter the `-n` parameter accordingly
+
+[TIP]
+====
+ * To open the service url in browser, add the option `--in-browser` `minishift openshift service` e.g. `minishift openshift service grafana -n istio-system --in-browser`
+ * To just know the url of the service do `minishift openshift service grafana -n istio-system  --url`
+====
+
+Detailed instructions for other platforms is available at https://istio.io/docs/setup/kubernetes/quick-start.html
 
 [[building]]
 == Building
@@ -102,6 +121,13 @@ in the repo under link:./apps[Apps].
 We will create a new project called "demo-apps" where we will deploy all the demo applications. To create the new project run the command 
 `oc new-project demo-apps`
 
+Since some of the demo applications needs privileged user permissions, we need to add the required permissions to the default service account,
+
+[code,sh]
+----
+oc adm policy add-scc-to-user anyuid -z default -n demo-apps
+----
+
 [[sidecar]]
 == Sidecar
 
@@ -109,11 +135,12 @@ We will create a new project called "demo-apps" where we will deploy all the dem
 ----
 cd $PROJECT_HOME/1_sidecar/hello-sidecar
 git checkout sidecar
-oc apply -f hello-sidecar.yaml
+oc apply -f hello-sidecar.yaml <1>
+oc expose svc hello-sidecar <2>
 ----
-
-This is will deploy a apache httpd server, the satic web resources of httpd server will be enriched via sidecar which is a small git synchronizer, that pulls
+<1> Deploys a apache httpd server, the static web resources of httpd server will be enriched via sidecar which is a small git synchronizer, that pulls
 the static sources from the github repo https://github.com/kameshsampath/hello-sidecar
+<2> Expose the service to be accessible outside
 
 === Accessing Application
 
