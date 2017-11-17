@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
       - name: spring-boot
-        image: namaste:1.0
+        image: kameshsampath/namaste:1.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
@@ -77,7 +77,7 @@ spec:
     spec:
       containers:
       - name: spring-boot
-        image: aloha:1.0
+        image: kameshsampath/aloha:1.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
@@ -125,7 +125,7 @@ spec:
     spec:
       containers:
       - name: spring-boot
-        image: hola:1.0
+        image: kameshsampath/hola:1.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
@@ -173,7 +173,7 @@ spec:
     spec:
       containers:
       - name: spring-boot
-        image: helloworld:1.0
+        image: kameshsampath/helloworld:1.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
@@ -221,7 +221,7 @@ spec:
     spec:
       containers:
       - name: spring-boot
-        image: helloworld-tracer:1.0
+        image: kameshsampath/helloworld-tracer:1.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
