@@ -8,6 +8,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import javax.servlet.http.HttpServletRequest;
@@ -25,7 +26,6 @@ public class HelloController {
     @Autowired
     RestTemplate restTemplate;
 
-
     @GetMapping("/helloworld")
     public String hello(HttpServletRequest request) {
 
@@ -33,17 +33,32 @@ public class HelloController {
 
         HttpEntity<String> httpEntity = new HttpEntity<>("", headers);
 
-        ResponseEntity<String> namaste = restTemplate.exchange("http://namaste:8080/namaste",
-                HttpMethod.GET, httpEntity, String.class);
+        ResponseEntity<String> namaste = restTemplate.exchange("http://istio-ingress/namaste", HttpMethod.GET,
+                httpEntity, String.class);
 
-        ResponseEntity<String> hola = restTemplate.exchange("http://hola:8080/hola",
-                HttpMethod.GET, httpEntity, String.class);
+        ResponseEntity<String> hola = restTemplate.exchange("http://istio-ingress/hola", HttpMethod.GET, httpEntity,
+                String.class);
 
-        ResponseEntity<String> aloha = restTemplate.exchange("http://aloha:8080/aloha",
-                HttpMethod.GET, httpEntity, String.class);
+        ResponseEntity<String> aloha = restTemplate.exchange("http://istio-ingress/aloha", HttpMethod.GET, httpEntity,
+                String.class);
 
+        //This will circuit break
+        String aloha2;
+        try {
+            ResponseEntity<String> aloha2Resp = restTemplate.exchange("http://istio-ingress/aloha2", HttpMethod.GET,
+                    httpEntity, String.class);
 
-        return responseUtils.buildResponse(namaste.getBody(), hola.getBody(), aloha.getBody());
+            if (aloha2Resp.getStatusCode().is2xxSuccessful()) {
+                aloha2 = aloha2Resp.getBody();
+            } else {
+                aloha2 = "Status Code :" + aloha2Resp.getStatusCode();
+            }
+        } catch (RestClientException e) {
+            log.error(e.getMessage());
+            aloha2 = e.getMessage();
+        }
+
+        return responseUtils.buildResponse(namaste.getBody(), hola.getBody(), aloha.getBody(), aloha2);
     }
 
 }
