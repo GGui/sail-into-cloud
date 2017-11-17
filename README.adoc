@@ -166,7 +166,7 @@ This demo shows how to do distributed tracing with https://istio.io[Istio], this
 === Building the application
 [code,sh]
 ----
-eval $(minikube docker-env) <1>
+eval $(minishift docker-env) <1>
 cd $PROJECT_HOME/apps
 git checkout tracing <2>
 ./mvnw clean install
@@ -187,43 +187,32 @@ The application can be deployed to Istio service mesh using the following comman
 ----
 cd $PROJECT_HOME/2_tracing/istio
 oc apply -f <(istioctl kube-inject -f $PROJECT_HOME/2_tracing/istio/helloworld.yaml) <1>
+oc apply -f itsio_helloworld.yaml <2>
+oc expose svc helloworld-tracer -n demo-apps <3>
 ----
 
-(OR)
-
-The source repo $PROJECT_HOME/2_tracing/istio folder already has the istio service mesh injected deployments _itsio_helloworld.yaml_, which could also be
-used directly as shown below,
-
-[code,sh]
-----
-cd $PROJECT_HOME/2_tracing/istio
-oc apply -f itsio_helloworld.yaml
-----
+<1> Add the Istio service mesh related https://kubernetes.io/docs/concepts/workloads/pods/init-containers/[init-containers] and sidecar proxy
+<2> Deploy the apps for tracing
+<3> Expose the helloworld-tracer service route
 
 Successful deployment will show the following pods running,
 
 image::./app_pods_v1.png[Application Pods v1.0]
 
-<1> Add the Istio service mesh related https://kubernetes.io/docs/concepts/workloads/pods/init-containers/[init-containers] and sidecar proxy
-
 == Accessing the application
 
-All the application urls are exposed using https://kubernetes.io/docs/concepts/services-networking/ingress/[ingress] routes, hence to access the application we need to find the `istio-ingress` service `NodePort` and the route path to the application. 
-
-The following command access `istio-ingress` route. Use the host with __http__ to access ingress paths
+To access the application we can use the `minishift openshift service` command, 
 
 [code,sh]
 ----
-oc get route -n istio-system istio-ingress
+minishift openshift service helloworld-tracer -n demo-apps --url <1>
+curl $(minishift openshift service helloworld-tracer -n demo-apps --url)/hellotracer <2>
 ----
 
-(OR)
-[code,sh]
-----
-oc get route -n istio-system istio-ingress -o jsonpath='{.spec.host}'
-----
+<1> Get the url to access the application, and append the `/hellotracer` to url 
+<2> Quick invocation via curl
 
-e.g. to access hello-world-tracer the URL will look like `http://<output-of-command>/hellotracer`
+e.g. the hello-world-tracer the URL will look like __http://helloworld-tracer-demo-apps.192.168.64.19.nip.io/hellotracer__
 
 === Service Dependencies
 
@@ -233,9 +222,9 @@ image::./service_deps.png[Service Dependencies]
 
 === Seeing Traces and Span
 
-Access the Zipkin `minikube service zipkin` or you can run the following command as well `curl $(minikube service zipkin --url)`
+Access the Jaeger `minishift openshift service jaeger-query -n istio-system --in-browser` to see the traces
 
-image::./jaeger_traces.png[Zipkin Traces]
+image::./jaeger_traces.png[Jaeger Traces]
 
 [[canary-release]]
 == Canary Release
@@ -246,7 +235,7 @@ that distributes the load between two versions of the applications using https:/
 === Building the application
 [code,sh]
 ----
-eval $(minikube docker-env) <1>
+eval $(minishift docker-env) <1>
 git checkout canary <2>
 cd $PROJECT_HOME/apps/hola
 ./mvnw clean install
