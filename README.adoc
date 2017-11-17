@@ -89,7 +89,7 @@ Detailed instructions is available at https://istio.io/docs/setup/kubernetes/qui
 
 Clone the sources from https://github.com/workspace7/sail-into-cloud, the location of clone will be called $PROJECT_HOME.
 
-The repositories has 4 tags namely:
+The repositories has 4 branches namely:
 
 * *sidecar* - the sources used to demo http://blog.kubernetes.io/2015/06/the-distributed-system-toolkit-patterns.html[sidecar]
 * *tracing* - the sources used to demo https://istio.io/docs/tasks/telemetry/distributed-tracing.html[distributed tracing]
@@ -115,12 +115,23 @@ oc apply -f hello-sidecar.yaml
 This is will deploy a apache httpd server, the satic web resources of httpd server will be enriched via sidecar which is a small git synchronizer, that pulls
 the static sources from the github repo https://github.com/kameshsampath/hello-sidecar
 
-Accessing Application
-===
+=== Accessing Application
 
-The application can be accessed using the command `minikube service hello-sidecar` or you can run the following command as well `curl $(minikube service hello-sidecar --url)`
+To get the application url run the following command,
 
-[[sidecar]]
+[code,sh]
+----
+minishift openshift service hello-sidecar --namespace demo-apps <1>
+----
+
+<1> this outputs the application url, if you wish to open the same in the browser add the flag `--in-browser`,
+
+[code,sh]
+----
+minishift openshift service hello-sidecar --in-browser --namespace demo-apps
+----
+
+[[distributed-tracing]]
 == Distributed Tracing
 
 This demo shows how to do distributed tracing with https://istio.io[Istio], this steps requires <<istio-setup>> is done and all pods are up and running.
