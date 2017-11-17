@@ -1,0 +1,34 @@
+---
+apiVersion: config.istio.io/v1alpha2
+kind: DestinationPolicy
+metadata:
+  name: aloha-cb
+spec:
+  destination: 
+    name: aloha
+    labels:
+      version: "2.0"
+  circuitBreaker:
+    simpleCb:
+      maxConnections: 5
+      httpMaxRequests: 5
+      httpMaxRequestsPerConnection: 2
+      sleepWindow: 30s
+      httpDetectionInterval: 1m
+---
+apiVersion: config.istio.io/v1alpha2
+kind: DestinationPolicy
+metadata:
+  name: helloworld-cb
+spec:
+  destination: 
+    name: helloworld
+    labels:
+      version: "2.0"
+  circuitBreaker:
+    simpleCb:
+      maxConnections: 2
+      httpMaxRequests: 5  
+      httpMaxRequestsPerConnection: 2
+      sleepWindow: 30s
+      httpDetectionInterval: 1m

@@ -128,6 +128,17 @@ Since some of the demo applications needs privileged user permissions, we need t
 oc adm policy add-scc-to-user anyuid -z default -n demo-apps
 ----
 
+== Apply Ingress rules
+
+Each application will not expose its service to the outside world, all service requests will be routed via `istio-ingress`.  The following
+commands will create a ingress routes to all the applications that will be used in the demo except for hello-sidecar.
+
+[code,sh]
+----
+cd $PROJECT_HOME
+oc apply -f helloworld_ingress.yaml
+----
+
 [[sidecar]]
 == Sidecar
 
@@ -188,12 +199,10 @@ The application can be deployed to Istio service mesh using the following comman
 cd $PROJECT_HOME/2_tracing/istio
 oc apply -f <(istioctl kube-inject -f $PROJECT_HOME/2_tracing/istio/helloworld.yaml) <1>
 oc apply -f itsio_helloworld.yaml <2>
-oc expose svc helloworld-tracer -n demo-apps <3>
 ----
 
 <1> Add the Istio service mesh related https://kubernetes.io/docs/concepts/workloads/pods/init-containers/[init-containers] and sidecar proxy
 <2> Deploy the apps for tracing
-<3> Expose the helloworld-tracer service route
 
 Successful deployment will show the following pods running,
 
@@ -205,26 +214,22 @@ To access the application we can use the `minishift openshift service` command,
 
 [code,sh]
 ----
-minishift openshift service helloworld-tracer -n demo-apps --url <1>
-curl $(minishift openshift service helloworld-tracer -n demo-apps --url)/hellotracer <2>
+curl $(minishift openshift service istio-ingress -n istio-system --url)/hellotracer
 ----
 
-<1> Get the url to access the application, and append the `/hellotracer` to url 
-<2> Quick invocation via curl
+=== Jaeger Tracing
 
-e.g. the hello-world-tracer the URL will look like __http://helloworld-tracer-demo-apps.192.168.64.19.nip.io/hellotracer__
-
-=== Service Dependencies
-
-The following graph shows the service dependencies,
-
-image::./service_deps.png[Service Dependencies]
-
-=== Seeing Traces and Span
+==== Traces and Span
 
 Access the Jaeger `minishift openshift service jaeger-query -n istio-system --in-browser` to see the traces
 
 image::./jaeger_traces.png[Jaeger Traces]
+
+==== Service Dependencies
+
+Switching to "Dependencies" tab of the Jaeger UI will show the service dependency graph
+
+image::./service_deps.png[Service Dependencies]
 
 [[canary-release]]
 == Canary Release
@@ -256,7 +261,6 @@ The application can be deployed to Istio service mesh using the following comman
 ----
 cd $PROJECT_HOME/3_canary/istio
 oc apply -f <(istioctl kube-inject -f $PROJECT_HOME/3_canary/istio/hola-v2.yaml)
-oc expose svc hola
 ----
 
 Successful deployment will show the following pods running,
@@ -282,7 +286,7 @@ image::./hola_canary_rules.png[Istio Rules]
 
 === Accessing the application
 
-If you run a load test with any load test tools like jmeter, gatling etc., to the url `minishift openshift service hola -n demo-apps --url` to see the routing rules getting applied.
+If you run a load test with any load test tools like jmeter, gatling etc., to the url `$(minishift openshift service istio-ingress --namespace istio-system --url)/hola` to see the routing rules getting applied.
 
 This demo uses gatling and thats configured as part of hola v2.0 app
 
@@ -290,7 +294,9 @@ This demo uses gatling and thats configured as part of hola v2.0 app
 
 [code,sh]
 ----
-./mvnw -Dskip.gatlingTests=false -Dgatling.simulationClass=HolaServiceSimulation -Dhola.it.endpoint.url=http://hola-demo-apps.192.168.64.19.nip.io clean integration-test
+cd $PROJECT_HOME/apps/hola
+git checkout canary
+./mvnw -Dskip.gatlingTests=false -Dgatling.simulationClass=HolaServiceSimulation -Dhola.it.endpoint.url=$(minishift openshift service istio-ingress --namespace istio-system --url) clean integration-test
 ----
 
 image::./hola_route_default_dist.png[Hola Route Distribution]
@@ -299,7 +305,7 @@ image::./hola_route_default_dist.png[Hola Route Distribution]
 
 [code,sh]
 ----
-./mvnw -Dskip.gatlingTests=false -Dgatling.simulationClass=HolaCanaryPremiumSimulation -Dhola.it.endpoint.url=http://hola-demo-apps.192.168.64.19.nip.io clean integration-test
+./mvnw -Dskip.gatlingTests=false -Dgatling.simulationClass=HolaCanaryPremiumSimulation -Dhola.it.endpoint.url=$(minishift openshift service istio-ingress --namespace istio-system --url) clean integration-test
 ----
 
 image::./hola_route_premium_dist.png[Hola Route for Premium Customers]
@@ -326,7 +332,7 @@ mvn clean install
 
 Successful build will show the following version *2.0* of the hola application docker image,
 
-image::./app_aloha_helloworld_images_v2.png[Aloha/HelloWorld Application Docker Image v2.0]
+image::./aloha_v2_docker_images.png[Aloha/HelloWorld Application Docker Image v2.0]
 
 === Deploying the application
 
@@ -338,16 +344,6 @@ cd $PROJECT_HOME/4_circuit_breaker/istio
 oc apply -f <(istioctl kube-inject -f $PROJECT_HOME/4_circuit_breaker/istio/circuit-breaker.yaml)
 ----
 
-(OR)
-
-The source repo $PROJECT_HOME/2_tracing/istio folder already has the istio service mesh injected deployments _itsio_circuit-breaker.yaml_, which could also be
-used directy as shown below,
-
-[code,sh]
-----
-cd $PROJECT_HOME/4_circuit_breaker/istio
-oc apply -f circuit-breaker.yaml
-----
 Successful deployment will show the following pods running,
 
 image::./app_helloworld_aloha_pods_v2.png[HelloWorld Aloha Pods v2.0]
@@ -362,15 +358,9 @@ cd $PROJECT_HOME/4_circuit_breaker/istio
 istioctl create -f aloha-cb-policy.yaml
 ----
 
-==== Apply new Ingress rules
+Successful creation of Circuit Breakers above will show like,
 
-Add the new ingress rule that will add new ingress route to `aloha2` path
-
-[code,sh]
-----
-cd $PROJECT_HOME/4_circuit_breaker/istio
-oc apply -f helloworld_ingress.yaml
-----
+image::./destination_polices.png[Destination Policies]
 
 === Checking Circuit Breakers
 
@@ -378,9 +368,7 @@ Run the following command,
 
 [code,sh]
 ----
-for i in {1..10}; do $(minikube ip):31513/aloha2 ; echo ""; done; <1>
+./mvnw -Dskip.gatlingTests=false -Dhelloworld.it.endpoint.url=$(minishift openshift service istio-ingress --namespace istio-system --url) clean integration-test
 ----
-
-<1> `31513` is the istio-ingress `NodePort`, this can be found using the command `oc get svc istio-ingress -o jsonpath='{.spec.ports[0].nodePort}'`
 
 --END--
