@@ -295,20 +295,25 @@ This demo uses gatling and thats configured as part of hola v2.0 app
 [code,sh]
 ----
 cd $PROJECT_HOME/apps/hola
-git checkout canary
 ./mvnw -Dskip.gatlingTests=false -Dgatling.simulationClass=HolaServiceSimulation -Dhola.it.endpoint.url=$(minishift openshift service istio-ingress --namespace istio-system --url) clean integration-test
 ----
 
 image::./hola_route_default_dist.png[Hola Route Distribution]
 
+In the graphic above you will see an approximated distribution of **1:4 (80-20)** between **v2.0 and v1.0** of the hola service
+
 ==== Traffic with header cust-type=premium
 
 [code,sh]
 ----
+cd $PROJECT_HOME/apps/hola
 ./mvnw -Dskip.gatlingTests=false -Dgatling.simulationClass=HolaCanaryPremiumSimulation -Dhola.it.endpoint.url=$(minishift openshift service istio-ingress --namespace istio-system --url) clean integration-test
 ----
 
 image::./hola_route_premium_dist.png[Hola Route for Premium Customers]
+
+In the graphic above you will see all 100% of the requests is routed to **v2.0** of the hola service, as the simulation has passed the request header `x-cust-type: premium`,
+which triggers route rule to redirect all traffic to **v2.0** of the hola service
 
 [[circuit-breakers]]
 == Circuit Breakers
