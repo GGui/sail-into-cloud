@@ -29,7 +29,7 @@
     <spring-boot.maven.plugin.version>1.5.4.RELEASE</spring-boot.maven.plugin.version>
 
     <java.version>1.8</java.version>
-    <docker-maven-plugin.version>0.20.1</docker-maven-plugin.version>
+    <docker-maven-plugin.version>0.23.0</docker-maven-plugin.version>
 
     <docker.image>fabric8/java-alpine-openjdk8-jdk</docker.image>
   </properties>
@@ -120,7 +120,7 @@
               <configuration>
                 <images>
                   <image>
-                    <name>%a:%v</name>
+                    <name>kameshsampath/%a:%v</name>
                     <build>
                       <from>${docker.image}</from>
                       <assembly>

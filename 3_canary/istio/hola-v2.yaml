@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: spring-boot
-        image: hola:2.0
+        image: kameshsampath/hola:2.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080

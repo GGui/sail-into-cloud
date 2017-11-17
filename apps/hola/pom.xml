@@ -15,6 +15,17 @@
     <name>Istio::Tracing Demos::Hola</name>
     <description>Says hello in Spanish</description>
 
+    <properties>
+        <skip.gatlingTests>false</skip.gatlingTests>
+        <!-- Modify this to suit your envionment before firing IT cases-->
+        <!--
+          sample command to trigger IT cases
+          ./mvw -Dskip.gatlingTests -Dhola.it.endpoint.url=<to your url> integration-test        
+        -->
+        
+        <hola.it.endpoint.url>http://hola-demo-apps.192.168.64.19.nip.io</hola.it.endpoint.url>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -37,6 +48,13 @@
             <artifactId>commmon-utils</artifactId>
             <version>1.0</version>
         </dependency>
+        <!-- Gatling Test -->
+        <dependency>
+            <groupId>io.gatling.highcharts</groupId>
+            <artifactId>gatling-charts-highcharts</artifactId>
+            <version>2.3.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -53,6 +71,22 @@
                 <groupId>io.fabric8</groupId>
                 <artifactId>docker-maven-plugin</artifactId>
             </plugin>
+            <plugin>
+                <groupId>io.gatling</groupId>
+                <artifactId>gatling-maven-plugin</artifactId>
+                <version>2.2.4</version>
+                <configuration>
+                <runMultipleSimulations>false</runMultipleSimulations>
+                <skip>${skip.gatlingTests}</skip>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                        <goal>integration-test</goal>
+                        </goals>
+                    </execution>
+                </executions>
+           </plugin>
         </plugins>
     </build>
 

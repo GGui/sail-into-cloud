@@ -1,13 +1,16 @@
 ---
-type: route-rule
-name: hola-canary
+apiVersion: config.istio.io/v1alpha2
+kind: RouteRule
+metadata:
+  name: hola-cust-premium
 spec:
-  destination: hola.default.svc.cluster.local
+  destination: 
+    name: hola
   precedence: 1
   route:
-  - tags:
+  - labels:
       version: "1.0"
     weight: 80
-  - tags:
+  - labels:
       version: "2.0"
     weight: 20

@@ -1,0 +1,34 @@
+---
+apiVersion: config.istio.io/v1alpha2
+kind: RouteRule
+metadata:
+  name: hola-premium
+spec:
+  precedence: 2
+  destination: 
+    name: hola
+  match:
+    request:
+      headers:
+        x-cust-type:
+           exact: "premium"
+  route:
+  - labels:
+      version: "2.0"
+    weight: 100
+---
+apiVersion: config.istio.io/v1alpha2
+kind: RouteRule
+metadata:
+  name: hola-canary
+spec:
+  destination: 
+    name: hola
+  precedence: 1
+  route:
+  - labels:
+      version: "1.0"
+    weight: 80
+  - labels:
+      version: "2.0"
+    weight: 20
